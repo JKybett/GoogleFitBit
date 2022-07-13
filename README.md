@@ -6,8 +6,8 @@ As of 2022-07-13 this script is being actively maintained, but is considered sta
 - Original script by John McLaughlin (loghound@gmail.com)
 - Modifications - Simon Bromberg (http://sbromberg.com)
 - Modifications - Mark Leavitt (PDX Quantified Self organizer) www.markleavitt.com
-- Modifications 2020 - Jozef Jarosciak - joe0.com
-- Modifications 2022 - Josh Kybett - JKybett.uk
+- Modifications 2020 - Jozef Jarosciak - [joe0.com](https://www.joe0.com/)
+- Modifications 2022 - Josh Kybett - [JKybett.uk](https://JKybett.uk)
   - Replaced discontinued UiApp code to use HtmlService instead.
   - Replace deprecated v1 FitBit API with current standard v2 FitBit API
   - Now fetches data using daily summaries rather than per-item ranges to avoid hitting API limits when getting single-day data.
