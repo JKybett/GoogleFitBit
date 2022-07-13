@@ -10,7 +10,7 @@
 //    -Adapted to get data for more features of FitBit.
 //    -Friendlier setup UI.
 //
-// Current version on GitHub:
+// Current version on GitHub: https://github.com/JKybett/GoogleFitBit/blob/main/FitBit.gs
 //
 // You are free to use, modify, copy any of the code in this script for your own purposes, as long as it's not for evil
 
