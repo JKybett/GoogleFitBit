@@ -1,7 +1,7 @@
 # GoogleFitBit
 A script for Google Sheets that connects a FitBit account to a Google Sheet.
 
-As of 2022-07-13 this script is being actively maintained, but is considered stable and presently in need of changes/fixes. Additional features may be added in future, but this is not a priority and while feature requests are welcome, they are not guaranteed.
+As of 2022-07-13 this script is being actively maintained, but is considered stable and not presently in need of changes/fixes. Additional features may be added in future, but this is not a priority and while feature requests are welcome, they are not guaranteed.
 
 - Original script by John McLaughlin (loghound@gmail.com)
 - Modifications - Simon Bromberg (http://sbromberg.com)
