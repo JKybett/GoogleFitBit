@@ -13,6 +13,10 @@ As of 2022-07-13 this script is being actively maintained, but is considered sta
   - Now fetches data using daily summaries rather than per-item ranges to avoid hitting API limits when getting single-day data.
   - Adapted to get data for more features of FitBit.
   - Friendlier setup UI.
+- Modifications 2023 - Anton Fedorov (datacompboy@gmail.com)
+  - Added grouping in setup UI
+  - Added pull for resting heart rate, HRV data, fitness score (vo2max)
+  - Exposed multi-day download UI
 
 ## Setup
 1. Open the Google Sheet you would like to store your data in. This version of the script cannot be expected to behave with other versions, but is designed so that future variants of the script can be made to work with this one with little to no effort.
