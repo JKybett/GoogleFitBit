@@ -9,6 +9,10 @@
 //    -Now fetches data using daily summaries rather than per-item ranges to avoid hitting API limits when getting single-day data.
 //    -Adapted to get data for more features of FitBit.
 //    -Friendlier setup UI.
+// Modifications 2023 - Anton Fedorov - datacompboy@gmail.com
+//    -Added grouping in setup UI
+//    -Added pull for resting heart rate, HRV data, fitness score (vo2max)
+//    -Exposed multi-day download UI
 //
 // Current version on GitHub: https://github.com/JKybett/GoogleFitBit/blob/main/FitBit.gs
 //
@@ -38,7 +42,8 @@ var CONSUMER_SECRET_PROPERTY_NAME = "fitbitConsumerSecret";
 var SERVICE_IDENTIFIER = 'fitbit'; // usually do not need to change this either
 
 // List of all things this script logs
-var LOGGABLES = ["activeScore",
+var LOGGABLES = ["# Activity #",
+                 "activeScore",
                  "activityCalories",
                  "caloriesBMR",
                  "caloriesOut",
@@ -50,8 +55,11 @@ var LOGGABLES = ["activeScore",
                  "sedentaryMinutes",
                  "steps",
                  "veryActiveMinutes",
+                 "restingHeartRate", // also in heart...
+                 "# Weight #",
                  "bmi",
                  "weight",
+                 "# Sleep",
                  "awakeCount",
                  "awakeDuration",
                  "awakeningsCount",
@@ -66,13 +74,22 @@ var LOGGABLES = ["activeScore",
                  "restlessDuration",
                  "startTime",
                  "timeInBed",
+                 "# Food #",
                  "calories",
                  "carbs",
                  "fat",
                  "fiber",
                  "protein",
                  "sodium",
-                 "water"
+                 "water",
+                 "# Cardio #",
+                 "vo2Max",
+                 "# HRV #",
+                 "dailyRmssd",
+                 "deepRmssd",
+                 /*
+                 "# Heart #",
+                 */
                  ];
                  
 //List of loggables that come from the activities section of API
@@ -88,7 +105,8 @@ var LOGGABLE_ACTIVITIES = [
                  "marginalCalories",
                  "sedentaryMinutes",
                  "steps",
-                 "veryActiveMinutes"
+                 "veryActiveMinutes",
+                 "restingHeartRate"
                  ];
 
 //List of loggables that come from the weight section of API
@@ -125,6 +143,19 @@ var LOGGABLE_FOOD = [
                  "sodium",
                  "water"
                  ];
+
+var LOGGABLE_CARDIO = [
+                 "vo2Max",
+                 ];
+var LOGGABLE_HRV = [
+                 "dailyRmssd",
+                 "deepRmssd"
+                 ];
+/*
+var LOGGABLE_HEART = [
+                 "restingHeartRate",
+                 ];
+*/
 
 /*
   Used to display information to the user via cell B3 to let them know that scripts are actively running.
@@ -263,7 +294,7 @@ function getFitbitService() {
   
   // Set the property store where authorized tokens should be persisted.
   .setPropertyStore(PropertiesService.getUserProperties())
-  .setScope('activity nutrition sleep weight profile settings')
+  .setScope('activity nutrition sleep weight profile settings cardio_fitness heartrate')
   // but not desirable in a production application.
   //.setParam('approval_prompt', 'force')
   .setTokenHeaders({
@@ -459,6 +490,44 @@ function syncDate(date = null) {
       console.log("- food");
     }
   }
+  //CARDIO
+  if(fetchNeeded(doc,LOGGABLE_CARDIO)){
+    result = UrlFetchApp.fetch(
+      "https://api.fitbit.com/1/user/-/cardioscore/date/"+dateString+".json",
+      options
+      );
+      console.log("CARDIO");
+    var cardioStats = JSON.parse(result.getContentText());
+    if(!logAllTheThings(doc,workingRow,cardioStats["cardioScore"][0]["value"])){
+      console.log("- cardio");
+    }
+  }
+  //HRV
+  if(fetchNeeded(doc,LOGGABLE_HRV)){
+    result = UrlFetchApp.fetch(
+      "https://api.fitbit.com/1/user/-/hrv/date/"+dateString+".json",
+      options
+      );
+      console.log("HRV");
+    var hrvStats = JSON.parse(result.getContentText());
+    if(!logAllTheThings(doc,workingRow,hrvStats["hrv"][0]["value"])){
+      console.log("- hrv");
+    }
+  }
+  //HEART
+  /*
+  if(fetchNeeded(doc,LOGGABLE_HEART)){
+    result = UrlFetchApp.fetch(
+      "https://api.fitbit.com/1/user/-/activities/heart/date/"+dateString+"/1d.json",
+      options
+      );
+      console.log("HEART");
+    var heartStats = JSON.parse(result.getContentText());
+    if(!logAllTheThings(doc,workingRow,heartStats["activities-heart"][0]["value"])){
+      console.log("- heart");
+    }
+  }
+  */
   done();
 }
 
@@ -594,6 +663,7 @@ function setup() {
     selectSheet = getSheet();
     earliestDate = getSheet().getRange("R2C2").getValue();
   }
+  var titles = selectSheet.getRange("4:4").getValues()[0];
   var contentHTML =''+
   '<!DOCTYPE html>'+"\n"+
   '<html>'+"\n"+
@@ -655,10 +725,14 @@ function setup() {
   '     <label>Data Elements to download: </label>'+"\n"+
 	'     <select id="loggables" name="loggables" multiple>'+"\n";
 	for (var resource in LOGGABLES) {
-    selected = (LOGGABLES.indexOf(LOGGABLES[resource]) > -1)?" selected":"";
-    contentHTML +='       <option value="'+LOGGABLES[resource]+'"'+selected+'>'+
-                  LOGGABLES[resource]+
-                  '</option>'+"\n";
+    if (LOGGABLES[resource].startsWith("#")) {
+      contentHTML += '       <optgroup label="'+LOGGABLES[resource]+'">\n';
+    } else {
+      selected = (titles.indexOf(LOGGABLES[resource]) > -1)?" selected":"";
+      contentHTML +='       <option value="'+LOGGABLES[resource]+'"'+selected+'>'+
+                    LOGGABLES[resource]+
+                    '</option>'+"\n";
+    }
   }
   contentHTML +=
 	'     </select></br></br>'+"\n"+
@@ -736,6 +810,50 @@ function authCallback(request) {
   }
   return app;
 } 
+
+function syncManyForm(){
+  var doc = SpreadsheetApp.getActiveSpreadsheet();
+  var contentHTML =''+
+  '<!DOCTYPE html>'+"\n"+
+  '<html>'+"\n"+
+	' <head>'+"\n"+
+  '   <script>'+"\n"+
+  '     function submitForm(form) {'+"\n"+
+  '       google.script.run'+"\n"+
+  '       .withSuccessHandler(function(value){'+"\n"+
+  '       })'+"\n"+
+  '       document.getElementById("form").style.display === "none";'+"\n"+
+	'       document.getElementById("done").style.display = "block";'+"\n"+
+  '       .submitData(form);'+"\n"+
+  '     }'+"\n"+
+  '   </script>'+"\n"+
+	' </head>'+"\n"+
+	' <body>'+"\n"+
+	'   <form id="form">'+"\n"+
+  '     <input type="hidden" id="task" name="task" value="syncMany">'+"\n"+
+	'     <label>First date to sync (year-month-day): </label>'+"\n"+
+	'     <input type="text" maxlength="4" size="4" id="firstYear" name="firstYear" value="'+(new Date().getFullYear())+'">'+" -\n\n"+
+	'     <input type="text" maxlength="2" size="2" id="firstMonth" name="firstMonth" value="'+(new Date().getMonth()+1)+'">'+" -\n\n"+
+	'     <input type="text" maxlength="2" size="2" id="firstDay" name="firstDay" value="'+(new Date().getDate())+'"></br>'+"\n\n"+		
+	'     <label>Last date to sync (year-month-day): </label>'+"\n"+
+	'     <input type="text" maxlength="4" size="4" id="secondYear" name="secondYear" value="'+(new Date().getFullYear())+'">'+" -\n\n"+
+	'     <input type="text" maxlength="2" size="2" id="secondMonth" name="secondMonth" value="'+(new Date().getMonth()+1)+'">'+" -\n\n"+
+	'     <input type="text" maxlength="2" size="2" id="secondDay" name="secondDay" value="'+(new Date().getDate())+'"></br>'+"\n\n"+		
+	'     <input type="button" value="Submit" onclick="'+
+  '       google.script.run'+
+  '       .withSuccessHandler(function(value){'+
+  '       })'+
+  '       .submitData(form);'+
+  '       document.getElementById(\'form\').style.display === \'none\';'+
+	'       document.getElementById(\'done\').style.display = \'block\';'+
+  '">'+"\n"+
+  '   </form>'+"\n"+
+	'	  <p id="done" style="display:none;">Done! Close the window!</p>'+"\n"+signature()+
+	' </body>'+"\n"+
+  '</html>';
+  var app= HtmlService.createHtmlOutput().setTitle("Sync Given Period").setContent(contentHTML);
+  doc.show(app);
+}
 
 function syncCustom(){
   var doc = SpreadsheetApp.getActiveSpreadsheet();
@@ -828,6 +946,10 @@ function onOpen() {
     menuEntries = [{
                       name: "Sync Today (" + dateString + ")",
                       functionName: "sync"
+                      }, 
+                      {
+                      name: "Sync period",
+                      functionName: "syncManyForm"
                       }, 
                       {
                       name: "Sync (custom Date)",
