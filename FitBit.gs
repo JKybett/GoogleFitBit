@@ -80,6 +80,17 @@ const apiDefinitions = {
     scope: "respiratory_rate",
     url: "https://api.fitbit.com/1/user/-/br/date/[date].json",
   },
+  cardioScore: {
+    fields: {
+      cardioScore: {
+        0: {
+          value: ["vo2Max"],
+        },
+      },
+    },
+    scope: "cardio_fitness",
+    url: "https://api.fitbit.com/1/user/-/cardioscore/date/[date].json",
+  },
   food: {
     fields: {
       summary: [
