@@ -146,26 +146,18 @@ const apiDefinitions = {
   sleep: {
     fields: {
       sleep: {
-        0: [
-          "awakeCount",
-          "awakeDuration",
-          "awakeningsCount",
-          "duration",
-          "efficiency",
-          "endTime",
-          "minutesAfterWakeup",
-          "minutesAsleep",
-          "minutesAwake",
-          "minutesToFallAsleep",
-          "restlessCount",
-          "restlessDuration",
-          "startTime",
-          "timeInBed",
-        ],
+        // Limitation: currently this API definition structure means it's not possible to mix scalar values at one level with
+        // nested values deeper - at the moment we get away with it.
+        // TODO: cope with multiple sleep logs in a day - want the main sleep if there is one
+        // TODO: array entries in levels:data
+        0: ["duration", "endTime", "startTime"],
+      },
+      summary: {
+        stages: ["deep", "light", "rem", "wake"],
       },
     },
     scope: "sleep",
-    url: "https://api.fitbit.com/1/user/-/sleep/date/[date].json",
+    url: "https://api.fitbit.com/1.2/user/-/sleep/date/[date].json",
   },
   weight: {
     fields: {
