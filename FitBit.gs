@@ -69,6 +69,17 @@ const apiDefinitions = {
     scope: "activity",
     url: "https://api.fitbit.com/1/user/-/activities/date/[date].json",
   },
+  breathingRate: {
+    fields: {
+      br: {
+        0: {
+          value: ["breathingRate"],
+        },
+      },
+    },
+    scope: "respiratory_rate",
+    url: "https://api.fitbit.com/1/user/-/br/date/[date].json",
+  },
   food: {
     fields: {
       summary: [
