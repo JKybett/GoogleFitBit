@@ -39,8 +39,11 @@ const SERVICE_IDENTIFIER = "fitbit"; // usually do not need to change this eithe
 /* * * * * * * * * * * API Definitions * * * * * * * * * * * * */
 
 /**
+ * Based on https://dev.fitbit.com/build/reference/web-api/
  * @typedef {object} APIDefinition
- * @property {}
+ * @property {} fields
+ * @property {} scope
+ * @property {} url
  *
  * format: field -> path
  * @type { [api: string]: APIDefinition }
@@ -64,16 +67,33 @@ const apiDefinitions = {
       ],
     },
     scope: "activity",
-    urlFn: (dateString) =>
-      `https://api.fitbit.com/1/user/-/activities/date/${dateString}.json`,
+    url: "https://api.fitbit.com/1/user/-/activities/date/[date].json",
   },
-  weight: {
+  food: {
     fields: {
-      weight: ["bmi", "weight"],
+      summary: [
+        "calories",
+        "carbs",
+        "fat",
+        "fiber",
+        "protein",
+        "sodium",
+        "water",
+      ],
     },
-    scope: "weight",
-    urlFn: (dateString) =>
-      `https://api.fitbit.com/1/user/-/body/log/weight/date/${dateString}.json`,
+    scope: "nutrition",
+    url: "https://api.fitbit.com/1/user/-/foods/log/date/[date].json",
+  },
+  heartRateVariability: {
+    fields: {
+      hrv: {
+        0: {
+          value: ["dailyRmssd", "deepRmssd"],
+        },
+      },
+    },
+    scope: "heartrate",
+    url: "https://api.fitbit.com/1/user/-/hrv/date/[date].json",
   },
   sleep: {
     fields: {
@@ -97,24 +117,14 @@ const apiDefinitions = {
       },
     },
     scope: "sleep",
-    urlFn: (dateString) =>
-      `https://api.fitbit.com/1/user/-/sleep/date/${dateString}.json`,
+    url: "https://api.fitbit.com/1/user/-/sleep/date/[date].json",
   },
-  food: {
+  weight: {
     fields: {
-      summary: [
-        "calories",
-        "carbs",
-        "fat",
-        "fiber",
-        "protein",
-        "sodium",
-        "water",
-      ],
+      weight: ["bmi", "weight"],
     },
-    scope: "nutrition",
-    urlFn: (dateString) =>
-      `https://api.fitbit.com/1/user/-/foods/log/date/${dateString}.json`,
+    scope: "weight",
+    url: "https://api.fitbit.com/1/user/-/body/log/weight/date/[date].json",
   },
 };
 
@@ -477,7 +487,7 @@ function syncDate(date = null) {
     if (Object.keys(apiFieldsNeeded).length > 0) {
       console.log(`Fetching ${apiName}...`);
       const result = UrlFetchApp.fetch(
-        apiDefinition.urlFn(dateString),
+        apiDefinition.url.replace("[date]", dateString),
         options
       );
       const stats = JSON.parse(result.getContentText());
