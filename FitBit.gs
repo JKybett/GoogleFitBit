@@ -63,6 +63,7 @@ const apiDefinitions = {
         "veryActiveMinutes",
       ],
     },
+    scope: "activity",
     urlFn: (dateString) =>
       `https://api.fitbit.com/1/user/-/activities/date/${dateString}.json`,
   },
@@ -70,6 +71,7 @@ const apiDefinitions = {
     fields: {
       weight: ["bmi", "weight"],
     },
+    scope: "weight",
     urlFn: (dateString) =>
       `https://api.fitbit.com/1/user/-/body/log/weight/date/${dateString}.json`,
   },
@@ -94,6 +96,7 @@ const apiDefinitions = {
         ],
       },
     },
+    scope: "sleep",
     urlFn: (dateString) =>
       `https://api.fitbit.com/1/user/-/sleep/date/${dateString}.json`,
   },
@@ -109,6 +112,7 @@ const apiDefinitions = {
         "water",
       ],
     },
+    scope: "nutrition",
     urlFn: (dateString) =>
       `https://api.fitbit.com/1/user/-/foods/log/date/${dateString}.json`,
   },
@@ -249,6 +253,19 @@ function clearService() {
   setSheet(null);
 }
 
+function getScopes() {
+  const scopesDict = {
+    profile: true,
+    settings: true,
+  };
+  Object.values(apiDefinitions).forEach((def) => {
+    if (def.scope) {
+      scopesDict[def.scope] = true;
+    }
+  });
+  return Object.keys(scopesDict).join(" ");
+}
+
 function getFitbitService() {
   // Create a new service with the given name. The name will be used when
   // persisting the authorized token, so ensure it is unique within the
@@ -275,7 +292,7 @@ function getFitbitService() {
 
       // Set the property store where authorized tokens should be persisted.
       .setPropertyStore(PropertiesService.getUserProperties())
-      .setScope("activity nutrition sleep weight profile settings")
+      .setScope(getScopes())
       // but not desirable in a production application.
       //.setParam('approval_prompt', 'force')
       .setTokenHeaders({
