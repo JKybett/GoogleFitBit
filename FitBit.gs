@@ -36,44 +36,7 @@ const CONSUMER_SECRET_PROPERTY_NAME = "fitbitConsumerSecret";
 
 const SERVICE_IDENTIFIER = "fitbit"; // usually do not need to change this either
 
-// List of all things this script logs
-var LOGGABLES = [
-  "activeScore",
-  "activityCalories",
-  "caloriesBMR",
-  "caloriesOut",
-  "elevation",
-  "fairlyActiveMinutes",
-  "floors",
-  "lightlyActiveMinutes",
-  "marginalCalories",
-  "sedentaryMinutes",
-  "steps",
-  "veryActiveMinutes",
-  "bmi",
-  "weight",
-  "awakeCount",
-  "awakeDuration",
-  "awakeningsCount",
-  "duration",
-  "efficiency",
-  "endTime",
-  "minutesAfterWakeup",
-  "minutesAsleep",
-  "minutesAwake",
-  "minutesToFallAsleep",
-  "restlessCount",
-  "restlessDuration",
-  "startTime",
-  "timeInBed",
-  "calories",
-  "carbs",
-  "fat",
-  "fiber",
-  "protein",
-  "sodium",
-  "water",
-];
+/* * * * * * * * * * * API Definitions * * * * * * * * * * * * */
 
 /**
  * @typedef {object} APIDefinition
@@ -150,6 +113,29 @@ const apiDefinitions = {
       `https://api.fitbit.com/1/user/-/foods/log/date/${dateString}.json`,
   },
 };
+
+// Assumes that leaf field names are unique between API calls (which is true in the existing version)
+// May need to introduce addressing by path if it's ambiguous
+function getFieldNames(obj) {
+  if (Array.isArray(obj)) {
+    return obj;
+  } else {
+    const fieldNames = [];
+    Object.keys(obj).forEach((k) => {
+      fieldNames.push(...getFieldNames(obj[k]));
+    });
+    return fieldNames;
+  }
+}
+
+const allFields = Object.values(apiDefinitions)
+  .map(({ fields }) => getFieldNames(fields))
+  .reduce((prev, current) => {
+    prev.push(...current);
+    return prev;
+  }, []);
+
+/* * * * * * * * * * * End of API Definitions * * * * * * * * * * * * */
 
 /*
   Used to display information to the user via cell B3 to let them know that scripts are actively running.
@@ -461,20 +447,6 @@ function syncDate(date = null) {
   };
   doc.getRange("R" + workingRow + "C" + 1).setValue(dateString);
 
-  // Assumes that leaf field names are unique between API calls (which is true in the existing version)
-  // May need to introduce addressing by path if it's ambiguous
-  function getFieldNames(obj) {
-    if (Array.isArray(obj)) {
-      return obj;
-    } else {
-      const fieldNames = [];
-      Object.keys(obj).forEach((k) => {
-        fieldNames.push(...getFieldNames(obj[k]));
-      });
-      return fieldNames;
-    }
-  }
-
   const allFieldsUsed = doc.getRange("4:4").getValues()[0];
 
   // For each API definition above, check whether any fo the fields are used and fetch from the API if so
@@ -520,14 +492,6 @@ function rowFromDate(date) {
   date = date - firstDay;
   date = (date - (date % dayMil)) / dayMil;
   return date + 5;
-}
-
-/*
-
-*/
-function fetchNeeded(doc, loggables) {
-  var titles = doc.getRange("4:4").getValues();
-  return loggables.some((r) => titles[0].includes(r));
 }
 
 function forEachRequiredField(statsObj, fieldObj, apiFieldsNeeded, fieldFn) {
@@ -778,15 +742,15 @@ function setup() {
     "\n" +
     '     <select id="loggables" name="loggables" multiple>' +
     "\n";
-  for (var resource in LOGGABLES) {
-    selected = LOGGABLES.indexOf(LOGGABLES[resource]) > -1 ? " selected" : "";
+  for (var resource in allFields) {
+    selected = allFields.indexOf(allFields[resource]) > -1 ? " selected" : "";
     contentHTML +=
       '       <option value="' +
-      LOGGABLES[resource] +
+      allFields[resource] +
       '"' +
       selected +
       ">" +
-      LOGGABLES[resource] +
+      allFields[resource] +
       "</option>" +
       "\n";
   }
