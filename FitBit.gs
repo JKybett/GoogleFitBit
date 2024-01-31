@@ -9,6 +9,7 @@
 //    -Now fetches data using daily summaries rather than per-item ranges to avoid hitting API limits when getting single-day data.
 //    -Adapted to get data for more features of FitBit.
 //    -Friendlier setup UI.
+// Modifications 2024 - Tim Goodwyn - timgoodwyn.me.uk
 //
 // Current version on GitHub: https://github.com/JKybett/GoogleFitBit/blob/main/FitBit.gs
 //
@@ -21,122 +22,186 @@
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
-// 
-// Copyright (c) 2022 JKybett
+//
+// Copyright (c) 2022 JKybett, Tim Goodwyn and other contributors
 
 /*
  * Do not change these key names. These are just keys to access these properties once you set them up by running the Setup function from the Fitbit menu
  */
-// Key of ScriptProperty for Firtbit consumer key.
-var CONSUMER_KEY_PROPERTY_NAME = "fitbitConsumerKey";
-// Key of ScriptProperty for Fitbit consumer secret.
-var CONSUMER_SECRET_PROPERTY_NAME = "fitbitConsumerSecret";
+const CONSUMER_KEY_PROPERTY_NAME = "fitbitConsumerKey";
+const CONSUMER_SECRET_PROPERTY_NAME = "fitbitConsumerSecret";
 
-var SERVICE_IDENTIFIER = 'fitbit'; // usually do not need to change this either
+const SERVICE_IDENTIFIER = "fitbit"; // usually do not need to change this either
 
-// List of all things this script logs
-var LOGGABLES = ["activeScore",
-                 "activityCalories",
-                 "caloriesBMR",
-                 "caloriesOut",
-                 "elevation",
-                 "fairlyActiveMinutes",
-                 "floors",
-                 "lightlyActiveMinutes",
-                 "marginalCalories",
-                 "sedentaryMinutes",
-                 "steps",
-                 "veryActiveMinutes",
-                 "bmi",
-                 "weight",
-                 "awakeCount",
-                 "awakeDuration",
-                 "awakeningsCount",
-                 "duration",
-                 "efficiency",
-                 "endTime",
-                 "minutesAfterWakeup",
-                 "minutesAsleep",
-                 "minutesAwake",
-                 "minutesToFallAsleep",
-                 "restlessCount",
-                 "restlessDuration",
-                 "startTime",
-                 "timeInBed",
-                 "calories",
-                 "carbs",
-                 "fat",
-                 "fiber",
-                 "protein",
-                 "sodium",
-                 "water"
-                 ];
-                 
-//List of loggables that come from the activities section of API
-var LOGGABLE_ACTIVITIES = [
-                 "activeScore",
-                 "activityCalories",
-                 "caloriesBMR",
-                 "caloriesOut",
-                 "elevation",
-                 "fairlyActiveMinutes",
-                 "floors",
-                 "lightlyActiveMinutes",
-                 "marginalCalories",
-                 "sedentaryMinutes",
-                 "steps",
-                 "veryActiveMinutes"
-                 ];
+/* * * * * * * * * * * API Definitions * * * * * * * * * * * * */
 
-//List of loggables that come from the weight section of API
-var LOGGABLE_WEIGHT = [
-                 "bmi",
-                 "weight"
-                 ];
+/**
+ * Based on https://dev.fitbit.com/build/reference/web-api/
+ * @typedef {object} APIDefinition
+ * @property {} fields
+ * @property {} scope
+ * @property {} url
+ *
+ * format: field -> path
+ * @type { [api: string]: APIDefinition }
+ */
+const apiDefinitions = {
+  activeZoneMinutes: {
+    fields: {
+      "activities-active-zone-minutes": {
+        0: {
+          value: [
+            "activeZoneMinutes",
+            "fatBurnActiveZoneMinutes",
+            "cardioActiveZoneMinutes",
+            "peakActiveZoneMinutes",
+          ],
+        },
+      },
+    },
+    scope: "activity",
+    url: "https://api.fitbit.com/1/user/-/activities/active-zone-minutes/date/[date]/1d.json",
+  },
+  activities: {
+    fields: {
+      summary: [
+        "activityCalories",
+        "caloriesBMR",
+        "caloriesOut",
+        "elevation",
+        "fairlyActiveMinutes",
+        "floors",
+        "lightlyActiveMinutes",
+        "marginalCalories",
+        "sedentaryMinutes",
+        "steps",
+        "veryActiveMinutes",
+      ],
+    },
+    scope: "activity",
+    url: "https://api.fitbit.com/1/user/-/activities/date/[date].json",
+  },
+  activitiesHeart: {
+    fields: {
+      "activities-heart": {
+        0: {
+          value: ["restingHeartRate"],
+        },
+      },
+    },
+    scope: "heartrate",
+    url: "https://api.fitbit.com/1/user/-/activities/heart/date/[date]/1d.json",
+  },
+  breathingRate: {
+    fields: {
+      br: {
+        0: {
+          value: ["breathingRate"],
+        },
+      },
+    },
+    scope: "respiratory_rate",
+    url: "https://api.fitbit.com/1/user/-/br/date/[date].json",
+  },
+  cardioScore: {
+    fields: {
+      cardioScore: {
+        0: {
+          value: ["vo2Max"],
+        },
+      },
+    },
+    scope: "cardio_fitness",
+    url: "https://api.fitbit.com/1/user/-/cardioscore/date/[date].json",
+  },
+  food: {
+    fields: {
+      summary: [
+        "calories",
+        "carbs",
+        "fat",
+        "fiber",
+        "protein",
+        "sodium",
+        "water",
+      ],
+    },
+    scope: "nutrition",
+    url: "https://api.fitbit.com/1/user/-/foods/log/date/[date].json",
+  },
+  heartRateVariability: {
+    fields: {
+      hrv: {
+        0: {
+          value: ["dailyRmssd", "deepRmssd"],
+        },
+      },
+    },
+    scope: "heartrate",
+    url: "https://api.fitbit.com/1/user/-/hrv/date/[date].json",
+  },
+  sleep: {
+    fields: {
+      sleep: {
+        // Limitation: currently this API definition structure means it's not possible to mix scalar values at one level with
+        // nested values deeper - at the moment we get away with it.
+        // TODO: cope with multiple sleep logs in a day - want the main sleep if there is one
+        // TODO: array entries in levels:data
+        0: ["duration", "endTime", "startTime"],
+      },
+      summary: {
+        stages: ["deep", "light", "rem", "wake"],
+      },
+    },
+    scope: "sleep",
+    url: "https://api.fitbit.com/1.2/user/-/sleep/date/[date].json",
+  },
+  weight: {
+    fields: {
+      weight: ["bmi", "weight"],
+    },
+    scope: "weight",
+    url: "https://api.fitbit.com/1/user/-/body/log/weight/date/[date].json",
+  },
+};
 
-//List of loggables that come from the sleep section of API
-var LOGGABLE_SLEEP = [
-                 "awakeCount",
-                 "awakeDuration",
-                 "awakeningsCount",
-                 "duration",
-                 "efficiency",
-                 "endTime",
-                 "minutesAfterWakeup",
-                 "minutesAsleep",
-                 "minutesAwake",
-                 "minutesToFallAsleep",
-                 "restlessCount",
-                 "restlessDuration",
-                 "startTime",
-                 "timeInBed"
-                 ];
+// Assumes that leaf field names are unique between API calls (which is true in the existing version)
+// May need to introduce addressing by path if it's ambiguous
+function getFieldNames(obj) {
+  if (Array.isArray(obj)) {
+    return obj;
+  } else {
+    const fieldNames = [];
+    Object.keys(obj).forEach((k) => {
+      fieldNames.push(...getFieldNames(obj[k]));
+    });
+    return fieldNames;
+  }
+}
 
-//List of loggables that come from the food section of API
-var LOGGABLE_FOOD = [
-                 "calories",
-                 "carbs",
-                 "fat",
-                 "fiber",
-                 "protein",
-                 "sodium",
-                 "water"
-                 ];
+const allFields = Object.values(apiDefinitions)
+  .map(({ fields }) => getFieldNames(fields))
+  .reduce((prev, current) => {
+    prev.push(...current);
+    return prev;
+  }, []);
+
+/* * * * * * * * * * * End of API Definitions * * * * * * * * * * * * */
 
 /*
   Used to display information to the user via cell B3 to let them know that scripts are actively running.
 */
-function working(stepStr = "Working"){
+function working(stepStr = "Working") {
   getSheet().getRange("R3C2").setValue(stepStr);
 }
 
 /*
   Used to display information to the user via cell B3 to let them know that scripts have stopped actively running.
 */
-function done(){
+function done() {
   getSheet().getRange("R3C2").setValue("Ready");
 }
 
@@ -151,7 +216,7 @@ function isConfigured() {
 
 */
 function getProperty(key) {
-  Logger.log("get property "+key);
+  Logger.log("get property " + key);
   return PropertiesService.getScriptProperties().getProperty(key);
 }
 
@@ -165,15 +230,15 @@ function setProperty(key, value) {
 /*
 
 */
-function getSheet(){
+function getSheet() {
   try {
     var spreadSheetID = getProperty("spreadSheetID");
     console.log(spreadSheetID);
     var spreadSheet = SpreadsheetApp.openById(spreadSheetID.toString());
     var sheetID = getProperty("sheetID");
-    var sheet = spreadSheet.getSheets().filter(
-      function(s) {return s.getSheetId().toString() === sheetID.toString()}
-    )[0];
+    var sheet = spreadSheet.getSheets().filter(function (s) {
+      return s.getSheetId().toString() === sheetID.toString();
+    })[0];
     return sheet;
   } catch (error) {
     return null;
@@ -183,8 +248,8 @@ function getSheet(){
 /*
 
 */
-function setSheet(sheet){
-  if(sheet == null){
+function setSheet(sheet) {
+  if (sheet == null) {
     setProperty("sheetID", "");
     setProperty("spreadSheetID", "");
   } else {
@@ -206,7 +271,7 @@ function setConsumerKey(consumerKey) {
 function getConsumerKey() {
   var consumer = getProperty(CONSUMER_KEY_PROPERTY_NAME);
   if (consumer == null) {
-      consumer = "";
+    consumer = "";
   }
   return consumer;
 }
@@ -224,18 +289,31 @@ function setConsumerSecret(secret) {
 function getConsumerSecret() {
   var secret = getProperty(CONSUMER_SECRET_PROPERTY_NAME);
   if (secret == null) {
-      secret = "";
+    secret = "";
   }
   return secret;
 }
 
-function clearService(){
+function clearService() {
   OAuth2.createService(SERVICE_IDENTIFIER)
-  .setPropertyStore(PropertiesService.getUserProperties())
-  .reset();
+    .setPropertyStore(PropertiesService.getUserProperties())
+    .reset();
   setConsumerKey("");
   setConsumerSecret("");
   setSheet(null);
+}
+
+function getScopes() {
+  const scopesDict = {
+    profile: true,
+    settings: true,
+  };
+  Object.values(apiDefinitions).forEach((def) => {
+    if (def.scope) {
+      scopesDict[def.scope] = true;
+    }
+  });
+  return Object.keys(scopesDict).join(" ");
 }
 
 function getFitbitService() {
@@ -243,41 +321,58 @@ function getFitbitService() {
   // persisting the authorized token, so ensure it is unique within the
   // scope of the property store
   if (!isConfigured()) {
-      setup();
-      return;
+    setup();
+    return;
   }
-                
-  return OAuth2.createService(SERVICE_IDENTIFIER)
-  
-  // Set the endpoint URLs, which are the same for all Google services.
-  .setAuthorizationBaseUrl('https://www.fitbit.com/oauth2/authorize')
-  .setTokenUrl('https://api.fitbit.com/oauth2/token')
-  
-  // Set the client ID and secret, from the Google Developers Console.
-  .setClientId(getConsumerKey())
-  .setClientSecret(getConsumerSecret())
-  
-  // Set the name of the callback function in the script referenced
-  // above that should be invoked to complete the OAuth flow.
-  .setCallbackFunction('authCallback')
-  
-  // Set the property store where authorized tokens should be persisted.
-  .setPropertyStore(PropertiesService.getUserProperties())
-  .setScope('activity nutrition sleep weight profile settings')
-  // but not desirable in a production application.
-  //.setParam('approval_prompt', 'force')
-  .setTokenHeaders({
-      'Authorization': 'Basic ' + Utilities.base64Encode(getConsumerKey() + ':' + getConsumerSecret())
-  });
+
+  return (
+    OAuth2.createService(SERVICE_IDENTIFIER)
+
+      // Set the endpoint URLs, which are the same for all Google services.
+      .setAuthorizationBaseUrl("https://www.fitbit.com/oauth2/authorize")
+      .setTokenUrl("https://api.fitbit.com/oauth2/token")
+
+      // Set the client ID and secret, from the Google Developers Console.
+      .setClientId(getConsumerKey())
+      .setClientSecret(getConsumerSecret())
+
+      // Set the name of the callback function in the script referenced
+      // above that should be invoked to complete the OAuth flow.
+      .setCallbackFunction("authCallback")
+
+      // Set the property store where authorized tokens should be persisted.
+      .setPropertyStore(PropertiesService.getUserProperties())
+      .setScope(getScopes())
+      // but not desirable in a production application.
+      //.setParam('approval_prompt', 'force')
+      .setTokenHeaders({
+        Authorization:
+          "Basic " +
+          Utilities.base64Encode(getConsumerKey() + ":" + getConsumerSecret()),
+      })
+  );
 }
 
 function submitData(form) {
-  switch(form.task){
-    case "setup": saveSetup(form); break;
-    case "sync" : syncDate(new Date(form.year, form.month-1, form.day)); break;
-    case "syncMany" : syncMany(new Date(form.firstYear, form.firstMonth-1, form.firstDay),new Date(form.secondYear, form.secondMonth-1, form.secondDay)); break;
-    case "BackToFitBitAPI" : firstRun();break;
-    case "FitBitAPI" : setup();break;
+  switch (form.task) {
+    case "setup":
+      saveSetup(form);
+      break;
+    case "sync":
+      syncDate(new Date(form.year, form.month - 1, form.day));
+      break;
+    case "syncMany":
+      syncMany(
+        new Date(form.firstYear, form.firstMonth - 1, form.firstDay),
+        new Date(form.secondYear, form.secondMonth - 1, form.secondDay)
+      );
+      break;
+    case "BackToFitBitAPI":
+      firstRun();
+      break;
+    case "FitBitAPI":
+      setup();
+      break;
     //case "credits" : credits();break;
   }
 }
@@ -286,51 +381,53 @@ function submitData(form) {
 function saveSetup(e) {
   //problemPrompt(e.spreadSheetID);
   var doc = SpreadsheetApp.openById(e.spreadSheetID);
-  if(parseInt(e.newSheet)>0){
-    if(e.sheetID.length<1){
-      e.sheetID="FitbitData";
+  if (parseInt(e.newSheet) > 0) {
+    if (e.sheetID.length < 1) {
+      e.sheetID = "FitbitData";
     }
-    doc=doc.insertSheet(e.sheetID.toString());
+    doc = doc.insertSheet(e.sheetID.toString());
     e.sheetID = doc.getSheetId();
   }
   var doc = SpreadsheetApp.openById(e.spreadSheetID);
-  doc=doc.getSheets().filter(
-      function(s) {return s.getSheetId().toString() === e.sheetID.toString();}
-    )[0];
+  doc = doc.getSheets().filter(function (s) {
+    return s.getSheetId().toString() === e.sheetID.toString();
+  })[0];
   //problemPrompt("'"+e.sheetID+"'");
   setSheet(doc);
   working();
-  doc.getRange("R2C2").setValue(new Date(e.year, e.month-1, e.day));
+  doc.getRange("R2C2").setValue(new Date(e.year, e.month - 1, e.day));
   console.log(e);
   setConsumerKey(e.consumerKey);
   setConsumerSecret(e.consumerSecret);
-  var i=2;
+  var i = 2;
   var cell = doc.getRange("R4C2");
   var titles = [];
   var wanted = [];
-  while(!cell.isBlank()){
+  while (!cell.isBlank()) {
     titles.push(cell.getValue());
-    cell = doc.getRange("R4C"+(++i));
+    cell = doc.getRange("R4C" + ++i);
     wanted.push(false);
   }
   var index = -1;
   for (const [key, value] of Object.entries(e.loggables)) {
-    index = titles.findIndex(e=>{return e==value});
-    if(index<0){
+    index = titles.findIndex((e) => {
+      return e == value;
+    });
+    if (index < 0) {
       titles.push(value);
       wanted.push(true);
     } else {
-      wanted[index]=true;
+      wanted[index] = true;
     }
   }
-  for(i=0;i<wanted.length;i++){
-    if(!wanted[i]){
-      titles[i]="";
+  for (i = 0; i < wanted.length; i++) {
+    if (!wanted[i]) {
+      titles[i] = "";
     }
   }
-  i=0;
+  i = 0;
   for (const [key, value] of Object.entries(titles)) {
-    doc.getRange("R4C"+(2+i)).setValue(value);
+    doc.getRange("R4C" + (2 + i)).setValue(value);
     i++;
   }
   doc.getRange("R1C1").setValue("Sheet last synced: never");
@@ -344,31 +441,35 @@ function saveSetup(e) {
 /*
 
 */
-function sync(){syncDate();}
+function sync() {
+  syncDate();
+}
 
 /*
 
 */
-function syncMany(firstDate,secondDate){
+function syncMany(firstDate, secondDate) {
   var dayMil = 1000 * 60 * 60 * 24;
-  days = Math.round((secondDate-firstDate)/dayMil);
+  days = Math.round((secondDate - firstDate) / dayMil);
   console.log(days);
-  if(days>30){
+  if (days > 30) {
     problemPrompt(
       "Fitbit doesn't like sending too much data too quickly, so anything more than 30 days may cause issues.</br>If this stops working partway through, wait about an hour before trying again.",
       "Warning!"
-      );
-  } if (days==0){
+    );
+  }
+  if (days == 0) {
     sync(secondDate);
-  } if (days<0){
+  }
+  if (days < 0) {
     problemPrompt(
       "I think you got your dates the wrong way round. Please try again!"
     );
   } else {
-    var curDate=secondDate;
-    while(Math.round((curDate-firstDate)/dayMil)>=0){
+    var curDate = secondDate;
+    while (Math.round((curDate - firstDate) / dayMil) >= 0) {
       syncDate(curDate);
-      curDate.setDate(curDate.getDate()-1);
+      curDate.setDate(curDate.getDate() - 1);
     }
   }
 }
@@ -378,208 +479,195 @@ function syncMany(firstDate,secondDate){
 */
 function syncDate(date = null) {
   working();
-  if(date==null){
+  if (date == null) {
     date = new Date();
   }
-  var dateString = date.getFullYear()
-    + '-'
-    + ("00" + (date.getMonth() + 1)).slice(-2)
-    + '-'
-    + ("00" + (date.getDate())).slice(-2);
+  var dateString =
+    date.getFullYear() +
+    "-" +
+    ("00" + (date.getMonth() + 1)).slice(-2) +
+    "-" +
+    ("00" + date.getDate()).slice(-2);
   var doc = getSheet();
   var workingRow = rowFromDate(date);
-  if(workingRow<5){
-    problemPrompt("The date given is before your defined Earliest Date. Extending before this date is not supported and causes problems.");
+  if (workingRow < 5) {
+    problemPrompt(
+      "The date given is before your defined Earliest Date. Extending before this date is not supported and causes problems."
+    );
     done();
     return;
   }
-  working("Working row: "+workingRow);
+  working("Working row: " + workingRow);
   // if the user has never performed setup, do it now
   if (!isConfigured()) {
-      setup();
-      return;
+    setup();
+    return;
   }
   doc.setFrozenRows(4);
   doc.getRange("R1C1").setValue("Sheet last synced: " + new Date());
   doc.getRange("R4C1").setValue("Date");
-  var options = { headers:{
-      "Authorization": 'Bearer ' + getFitbitService().getAccessToken(),
-      "method": "GET"
-  }};
-  doc.getRange("R"+workingRow+"C"+1).setValue(dateString);
-  //ACTIVITIES
-  if(fetchNeeded(doc,LOGGABLE_ACTIVITIES)){
-    result = UrlFetchApp.fetch(
-      "https://api.fitbit.com/1/user/-/activities/date/"+dateString+".json",
-      options
+  var options = {
+    headers: {
+      Authorization: "Bearer " + getFitbitService().getAccessToken(),
+      method: "GET",
+    },
+  };
+  doc.getRange("R" + workingRow + "C" + 1).setValue(dateString);
+
+  const allFieldsUsed = doc.getRange("4:4").getValues()[0];
+
+  // For each API definition above, check whether any fo the fields are used and fetch from the API if so
+  Object.entries(apiDefinitions).forEach(([apiName, apiDefinition]) => {
+    const fieldNames = getFieldNames(apiDefinition.fields);
+    const apiFieldsNeeded = Object.fromEntries(
+      fieldNames
+        .filter((field) => allFieldsUsed.includes(field))
+        .map((field) => [field, allFieldsUsed.indexOf(field)])
+    );
+    if (Object.keys(apiFieldsNeeded).length > 0) {
+      console.log(`Fetching ${apiName}...`);
+      const result = UrlFetchApp.fetch(
+        apiDefinition.url.replace("[date]", dateString),
+        options
       );
-    console.log("ACTIVITIES");
-    var activeStats = JSON.parse(result.getContentText());
-    if(!logAllTheThings(doc,workingRow,activeStats["summary"])){
-      console.log("- active");
-    }
-  }
-  //WEIGHT
-  if(fetchNeeded(doc,LOGGABLE_WEIGHT)){
-    result = UrlFetchApp.fetch(
-      "https://api.fitbit.com/1/user/-/body/log/weight/date/"+dateString+".json",
-      options
+      const stats = JSON.parse(result.getContentText());
+      console.log(`Logging ${apiName}...`);
+
+      forEachRequiredField(
+        stats,
+        apiDefinition.fields,
+        apiFieldsNeeded,
+        (fieldName, column, value) => {
+          console.log(`log ${fieldName}, ${column}, ${value}`);
+          if (column >= 0) {
+            doc.getRange("R" + workingRow + "C" + (column + 1)).setValue(value);
+          }
+        }
       );
-      console.log("WEIGHT");
-    var weightStats = JSON.parse(result.getContentText());
-    if(!logAllTheThings(doc,workingRow,weightStats["weight"][0])){
-      console.log("- weight");
     }
-  }
-  //SLEEP
-  if(fetchNeeded(doc,LOGGABLE_SLEEP)){
-    result = UrlFetchApp.fetch(
-      "https://api.fitbit.com/1/user/-/sleep/date/"+dateString+".json",
-      options
-      );
-      console.log("SLEEP");
-    var sleepStats = JSON.parse(result.getContentText());
-    if(!logAllTheThings(doc,workingRow,sleepStats["sleep"][0])){
-      console.log("- sleep(sleep)");
-    }
-      console.log("SLEEP");
-    if(!logAllTheThings(doc,workingRow,sleepStats["summary"])){
-      console.log("- sleep(summary)");
-    }
-  }
-  //FOOD
-  if(fetchNeeded(doc,LOGGABLE_FOOD)){
-    result = UrlFetchApp.fetch(
-      "https://api.fitbit.com/1/user/-/foods/log/date/"+dateString+".json",
-      options
-      );
-      console.log("FOOD");
-    var foodStats = JSON.parse(result.getContentText());
-    if(!logAllTheThings(doc,workingRow,foodStats["summary"])){
-      console.log("- food");
-    }
-  }
+  });
+
   done();
 }
 
 /*
   Calculates which row should be used for a particular date's data based on the user-provided earliest date that data can be from.
 */
-function rowFromDate(date){
+function rowFromDate(date) {
   var dayMil = 1000 * 60 * 60 * 24;
   var firstDay = getSheet().getRange("R2C2").getValue();
-  date = (date-firstDay);
-  date = (date-(date%dayMil))/dayMil;
-  return date+5;
+  date = date - firstDay;
+  date = (date - (date % dayMil)) / dayMil;
+  return date + 5;
 }
 
-/*
-
-*/
-function fetchNeeded(doc,loggables){
-  var titles = doc.getRange("4:4").getValues();
-  return loggables.some(r=> titles[0].includes(r))
-}
-
-/*
-
-*/
-function logAllTheThings(doc,row,entries){
-  var col;
-  var titles = doc.getRange("4:4").getValues();
-  if(entries==null || entries == undefined){
-    console.log("Logging failure. Skipping thing.");
-    return false;
+function forEachRequiredField(statsObj, fieldObj, apiFieldsNeeded, fieldFn) {
+  if (Array.isArray(fieldObj)) {
+    fieldObj.forEach((field) => {
+      if (apiFieldsNeeded[field] !== undefined) {
+        fieldFn(field, apiFieldsNeeded[field], statsObj[field]);
+      }
+    });
+  } else {
+    Object.keys(fieldObj).forEach((field) => {
+      if (statsObj[field]) {
+        forEachRequiredField(
+          statsObj[field],
+          fieldObj[field],
+          apiFieldsNeeded,
+          fieldFn
+        );
+      }
+    });
   }
-  for (const [k, v] of Object.entries(entries)) {
-    col = titles[0].findIndex(e=>{return e==k})+1;
-    if(col>0){
-      doc.getRange("R"+row+"C"+col).setValue(v);
-      console.log("  logged:"+k);
-    } else {
-      console.log("unlogged:"+k);
-    }
-  }
-  return true;
 }
 
 /*
 
 */
-function firstRun(){
-  var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var contentHTML='<html>'+"\n"+
-	'<head>'+"\n"+
-	'	<style>'+"\n"+
-	'	label, input {'+"\n"+
-	'		width:95%;'+"\n"+
-	'	}'+"\n"+
-	'    .radio {'+"\n"+
-	'    	width:initial;'+"\n"+
-	'    }'+"\n"+
-	'    .box {'+"\n"+
-	'    	border-style: solid;'+"\n"+
-	'        padding: 5px;'+"\n"+
-	'        margin-bottom: 10px;'+"\n"+
-	'    }'+"\n"+
-	'    #hidden {'+"\n"+
-	'    	display: none;'+"\n"+
-	'    }'+"\n"+
-	'	</style>'+"\n"+
-	'</head>'+"\n"+
-	'  <body>'+"\n"+
-	'      Go to <a href="https://dev.fitbit.com/apps/new">https://dev.fitbit.com/apps/new</a></br></br>'+"\n"+
-	'      Login and register a new app using the following details:</br></br>'+"\n"+
-	'    <div class="box" id="hider">'+"\n"+
-	'        Only the options that must have specific values are shown below.</br>'+"\n"+
-	'        <a href="#" onclick="document.getElementById(\'hidden\').style.display=\'block\';document.getElementById(\'hider\').style.display=\'none\';return false;">Click here</a> for example data you can copy and paste into the other fields.'+"\n"+
-	'    </div>'+"\n"+
-	'    <div class="box" id="hidden">'+"\n"+
-	'        These options can be filled with different data. This is only an example.</br>'+"\n"+
-	'        You can <a href="#" onclick="document.getElementById(\'hider\').style.display=\'block\';document.getElementById(\'hidden\').style.display=\'none\';return false;">hide these options</a> if you want.'+"\n"+
-	'        </br></br>'+"\n"+
-	'        <label>Application Name: </label></br><input type="text" value="Export to Google Spreadsheet" readonly></br></br>'+"\n"+
-	'        <label>Description: </label></br><input type="text" value="Exports to Google Spreadsheet" readonly></br></br>'+"\n"+
-	'        <label>Application Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>'+"\n"+
-	'        <label>Organization: </label></br><input type="text" value="Me" readonly></br></br>'+"\n"+
-	'        <label>Organization Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>'+"\n"+
-	'        <label>Terms of Service URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>'+"\n"+
-	'        <label>Privacy Policy URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>'+"\n"+
-	'    </div>'+"\n"+
-	'    <div class="box">'+"\n"+
-	'        These options <b>must</b> be filled with the following data.</br></br>'+"\n"+
-	'        <label>OAuth 2.0 Application Type: </label></br>'+"\n"+
-	'        <input class="radio" type="radio" name="appType" id="Server" disabled>'+"\n"+
-	'        <label class="radio" for="Server">Server</label>'+"\n"+
-	'        <input class="radio" type="radio" name="appType" id="Client" disabled>'+"\n"+
-	'        <label class="radio" for="Client">Client</label>'+"\n"+
-	'        <input class="radio" type="radio" name="appType" id="Personal" checked>'+"\n"+
-	'        <label class="radio" for="Personal">Personal</label></br></br>'+"\n"+
-	'        <label>Redirect URL: </label></br><input type="text" value="https://script.google.com/macros/d/'+ScriptApp.getScriptId()+'/usercallback" readonly></br></br>'+"\n"+
-	'        <label>Default Access Type: </label></br>'+"\n"+
-	'        <input class="radio" type="radio" name="accessType" id="RWr" checked>'+"\n"+
-	'        <label class="radio" for="RWr">Read & Write</label>'+"\n"+
-	'        <input class="radio" type="radio" name="accessType" id="ROn" disabled>'+"\n"+
-	'        <label class="radio" for="ROn">Read-Only</label></br></br>'+"\n"+
-	'    </div>'+"\n"+
-	'    Once you have accepted the terms and conditions and clicked "register", make a note of the following details on the next page:</br>'+"\n"+
-	'    <ul>'+"\n"+
-	'    <li><b>OAuth 2.0 Client ID</b></li>'+"\n"+
-	'    <li><b>Client Secret</b></li>'+"\n"+
-	'    </ul>'+"\n"+
-	'    Then click the button below to move on to the next step:'+"\n"+
-	'    <form id="form">'+"\n"+
-	'    <input type="hidden" id="task" name="task" value="FitBitAPI">'+"\n"+
-	'    <input class="normWid" type="button" value="Next" onclick="'+"\n"+
-	'    google.script.run.withSuccessHandler(function(value){'+"\n"+
-	'    }).submitData(form);document.getElementById(\'done\').style.display = \'block\';">'+"\n"+
-	'    </form>'+"\n"+
-	'    <p id="done" style="display:none;">Please wait!</p>'+"\n"+signature()+
-	'  </body>'+"\n"+
-	'</html>';
-  var app= HtmlService.createHtmlOutput().setTitle("Setup: FitBit App").setContent(contentHTML);
+function firstRun() {
+  const doc = SpreadsheetApp.getActiveSpreadsheet();
+  const contentHTML = `
+<html>
+  <head>
+    <style>
+      label, input {
+      width:95%;
+      }
+      .radio {
+        width:initial;
+      }
+      .box {
+        border-style: solid;
+        padding: 5px;
+        margin-bottom: 10px;
+      }
+      #hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    Go to <a href="https://dev.fitbit.com/apps/new">https://dev.fitbit.com/apps/new</a></br></br>
+    Login and register a new app using the following details:</br></br>
+    <div class="box" id="hider">
+      Only the options that must have specific values are shown below.</br>
+      <a href="#" onclick="document.getElementById('hidden').style.display='block';document.getElementById('hider').style.display='none';return false;">
+        Click here
+      </a> for example data you can copy and paste into the other fields.
+    </div>
+    <div class="box" id="hidden">
+      These options can be filled with different data. This is only an example.</br>
+      You can
+      <a href="#" onclick="document.getElementById('hider').style.display='block';document.getElementById('hidden').style.display='none';return false;">
+        hide these options
+      </a> if you want.
+      </br></br>
+      <label>Application Name: </label></br><input type="text" value="Export to Google Spreadsheet" readonly></br></br>
+      <label>Description: </label></br><input type="text" value="Exports to Google Spreadsheet" readonly></br></br>
+      <label>Application Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+      <label>Organization: </label></br><input type="text" value="Me" readonly></br></br>
+      <label>Organization Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+      <label>Terms of Service URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+      <label>Privacy Policy URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+    </div>
+    <div class="box">
+      These options <b>must</b> be filled with the following data.</br></br>
+      <label>OAuth 2.0 Application Type: </label></br>
+      <input class="radio" type="radio" name="appType" id="Server" disabled>
+      <label class="radio" for="Server">Server</label>
+      <input class="radio" type="radio" name="appType" id="Client" disabled>
+      <label class="radio" for="Client">Client</label>
+      <input class="radio" type="radio" name="appType" id="Personal" checked>
+      <label class="radio" for="Personal">Personal</label></br></br>
+      <label>Redirect URL: </label></br><input type="text" value="https://script.google.com/macros/d/${ScriptApp.getScriptId()}/usercallback" readonly></br></br>
+      <label>Default Access Type: </label></br>
+      <input class="radio" type="radio" name="accessType" id="RWr" checked>
+      <label class="radio" for="RWr">Read & Write</label>
+      <input class="radio" type="radio" name="accessType" id="ROn" disabled>
+      <label class="radio" for="ROn">Read-Only</label></br></br>
+    </div>
+    Once you have accepted the terms and conditions and clicked "register", make a note of the following details on the next page:</br>
+    <ul>
+      <li><b>OAuth 2.0 Client ID</b></li>
+      <li><b>Client Secret</b></li>
+    </ul>
+    Then click the button below to move on to the next step:
+    <form id="form">
+      <input type="hidden" id="task" name="task" value="FitBitAPI">
+      <input class="normWid" type="button" value="Next" onclick="
+        google.script.run.withSuccessHandler(function(value){
+        }).submitData(form);document.getElementById('done').style.display = 'block';">
+    </form>
+    <p id="done" style="display:none;">Please wait!</p>
+    ${signature()}
+  </body>
+</html>`;
+  const app = HtmlService.createHtmlOutput()
+    .setTitle("Setup: FitBit App")
+    .setContent(contentHTML);
   doc.show(app);
-}               
+}
 
 /*
 
@@ -590,130 +678,236 @@ function setup() {
   var sheets = doc.getSheets();
   var selectSheet = doc.getActiveSheet();
   var earliestDate = new Date();
-  if(getSheet()!=null){
+  if (getSheet() != null) {
     selectSheet = getSheet();
     earliestDate = getSheet().getRange("R2C2").getValue();
   }
-  var contentHTML =''+
-  '<!DOCTYPE html>'+"\n"+
-  '<html>'+"\n"+
-	' <head>'+"\n"+
-  '   <style>'+"\n"+
-  '     label, input, select {'+"\n"+
-  '       width: 45%;'+"\n"+
-  '       display: inline-block;'+"\n"+
-  '       vertical-align: top;'+"\n"+
-  '     }'+"\n"+
-  '     label{'+"\n"+
-  '     }'+"\n"+
-  '     input, select {'+"\n"+
-  '       text-align: right;'+"\n"+
-  '     }'+"\n"+
-  '     .half {'+"\n"+
-  '       width: 50%;'+"\n"+
-  '     }'+"\n"+
-  '     .full {'+"\n"+
-  '       width: 100%;'+"\n"+
-  '     }'+"\n"+
-  '     .right {'+"\n"+
-  '       text-align: right;'+"\n"+
-  '       margin-right: 0px;'+"\n"+
-  '     }'+"\n"+
-  '     .normWid {'+"\n"+
-  '       width: initial;'+"\n"+
-  '     }'+"\n"+
-  '     .sheetName {'+"\n"+
-  '       visibility: hidden;'+"\n"+
-  '     }'+"\n"+
-  '   </style>'+"\n"+
-	' </head>'+"\n"+
-	' <body>'+"\n"+
-  '   <form id="backForm">'+"\n"+
-  '     <input type="hidden" id="task" name="task" value="BackToFitBitAPI">'+"\n"+
-  '     <center>'+
-  '       <input class="normWid" type="button" value="<<< Setup FitBit App" onclick="'+
-  '         google.script.run'+
-  '         .withSuccessHandler(function(value){'+
-  '         })'+
-  '         .submitData(backForm);'+
-  '">'+"\n"+
-  '     </center>'+
-  '   </form>'+"\n"+
-	'   <form id="form">'+"\n"+
-  '     <input type="hidden" id="task" name="task" value="setup">'+"\n"+
-  '     <input type="hidden" id="spreadsheetID" name="spreadSheetID" value="'+doc.getId().toString()+'">'+"\n"+
-	'     <label class="normWid">Script ID: </label>'+"\n"+
-  '     <label class="normWid right">'+ScriptApp.getScriptId()+'</label></br></br>'+"\n\n"+
-  '     <label>Fitbit OAuth 2.0 Client ID:*</label>'+"\n"+
-	'     <input type="text" id="consumerKey" name="consumerKey" value="'+getConsumerKey()+'"></br>'+"\n\n"+		
-	'     <label>Fitbit OAuth Consumer Secret:*</label>'+"\n"+
-  '     <input type="text" id="consumerSecret" name="consumerSecret" value="'+getConsumerSecret()+'"></br></br>'+"\n\n"+
-	'     <label>Earliest Date (year-month-day): </label>'+"\n"+
-	'     <input class="normWid" type="text" maxlength="4" size="4" id="year" name="year" value="'+(earliestDate.getFullYear())+'">'+" -\n\n"+
-	'     <input class="normWid" type="text" maxlength="2" size="2" id="month" name="month" value="'+(earliestDate.getMonth()+1)+'">'+" -\n\n"+
-	'     <input class="normWid" type="text" maxlength="2" size="2" id="day" name="day" value="'+(earliestDate.getDate())+'"></br>'+"\n\n"+		
-  '     <label>Data Elements to download: </label>'+"\n"+
-	'     <select id="loggables" name="loggables" multiple>'+"\n";
-	for (var resource in LOGGABLES) {
-    selected = (LOGGABLES.indexOf(LOGGABLES[resource]) > -1)?" selected":"";
-    contentHTML +='       <option value="'+LOGGABLES[resource]+'"'+selected+'>'+
-                  LOGGABLES[resource]+
-                  '</option>'+"\n";
+  var contentHTML =
+    "" +
+    "<!DOCTYPE html>" +
+    "\n" +
+    "<html>" +
+    "\n" +
+    " <head>" +
+    "\n" +
+    "   <style>" +
+    "\n" +
+    "     label, input, select {" +
+    "\n" +
+    "       width: 45%;" +
+    "\n" +
+    "       display: inline-block;" +
+    "\n" +
+    "       vertical-align: top;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     label{" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     input, select {" +
+    "\n" +
+    "       text-align: right;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     .half {" +
+    "\n" +
+    "       width: 50%;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     .full {" +
+    "\n" +
+    "       width: 100%;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     .right {" +
+    "\n" +
+    "       text-align: right;" +
+    "\n" +
+    "       margin-right: 0px;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     .normWid {" +
+    "\n" +
+    "       width: initial;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "     .sheetName {" +
+    "\n" +
+    "       visibility: hidden;" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "   </style>" +
+    "\n" +
+    " </head>" +
+    "\n" +
+    " <body>" +
+    "\n" +
+    '   <form id="backForm">' +
+    "\n" +
+    '     <input type="hidden" id="task" name="task" value="BackToFitBitAPI">' +
+    "\n" +
+    "     <center>" +
+    '       <input class="normWid" type="button" value="<<< Setup FitBit App" onclick="' +
+    "         google.script.run" +
+    "         .withSuccessHandler(function(value){" +
+    "         })" +
+    "         .submitData(backForm);" +
+    '">' +
+    "\n" +
+    "     </center>" +
+    "   </form>" +
+    "\n" +
+    '   <form id="form">' +
+    "\n" +
+    '     <input type="hidden" id="task" name="task" value="setup">' +
+    "\n" +
+    '     <input type="hidden" id="spreadsheetID" name="spreadSheetID" value="' +
+    doc.getId().toString() +
+    '">' +
+    "\n" +
+    '     <label class="normWid">Script ID: </label>' +
+    "\n" +
+    '     <label class="normWid right">' +
+    ScriptApp.getScriptId() +
+    "</label></br></br>" +
+    "\n\n" +
+    "     <label>Fitbit OAuth 2.0 Client ID:*</label>" +
+    "\n" +
+    '     <input type="text" id="consumerKey" name="consumerKey" value="' +
+    getConsumerKey() +
+    '"></br>' +
+    "\n\n" +
+    "     <label>Fitbit OAuth Consumer Secret:*</label>" +
+    "\n" +
+    '     <input type="text" id="consumerSecret" name="consumerSecret" value="' +
+    getConsumerSecret() +
+    '"></br></br>' +
+    "\n\n" +
+    "     <label>Earliest Date (year-month-day): </label>" +
+    "\n" +
+    '     <input class="normWid" type="text" maxlength="4" size="4" id="year" name="year" value="' +
+    earliestDate.getFullYear() +
+    '">' +
+    " -\n\n" +
+    '     <input class="normWid" type="text" maxlength="2" size="2" id="month" name="month" value="' +
+    (earliestDate.getMonth() + 1) +
+    '">' +
+    " -\n\n" +
+    '     <input class="normWid" type="text" maxlength="2" size="2" id="day" name="day" value="' +
+    earliestDate.getDate() +
+    '"></br>' +
+    "\n\n" +
+    "     <label>Data Elements to download: </label>" +
+    "\n" +
+    '     <select id="loggables" name="loggables" multiple>' +
+    "\n";
+  for (var resource in allFields) {
+    selected = allFields.indexOf(allFields[resource]) > -1 ? " selected" : "";
+    contentHTML +=
+      '       <option value="' +
+      allFields[resource] +
+      '"' +
+      selected +
+      ">" +
+      allFields[resource] +
+      "</option>" +
+      "\n";
   }
   contentHTML +=
-	'     </select></br></br>'+"\n"+
-  '     <label>Sheet to store data: </label>'+"\n"+
-  '     <select id="sheets" onchange=\''+
-  '       var val = this.value;'+
-  '       document.getElementById("newSheet").value="1";'+
-  '       document.getElementById("sheetID").value=val=="new"?"":val;'+
-  '       var hiders = document.getElementsByClassName("sheetName");'+
-  '       var display=val=="new"?"visible":"hidden";'+
-  '       for (const item of hiders) {'+
-  '         item.style.visibility = display;'+
-  '       }'+
-  '\'>'+"\n";
+    "     </select></br></br>" +
+    "\n" +
+    "     <label>Sheet to store data: </label>" +
+    "\n" +
+    '     <select id="sheets" onchange=\'' +
+    "       var val = this.value;" +
+    '       document.getElementById("newSheet").value="1";' +
+    '       document.getElementById("sheetID").value=val=="new"?"":val;' +
+    '       var hiders = document.getElementsByClassName("sheetName");' +
+    '       var display=val=="new"?"visible":"hidden";' +
+    "       for (const item of hiders) {" +
+    "         item.style.visibility = display;" +
+    "       }" +
+    "'>" +
+    "\n";
   if (sheets.length > 0) {
-    for(var i =0; i <sheets.length; i++){
-      selected = sheets[i].getSheetId()==selectSheet.getSheetId()?" selected":"";
-      contentHTML += 
-      '       <option value="'+sheets[i].getSheetId()+'"'+selected+">\n"+
-      '         '+sheets[i].getName()+"\n"+
-      '       </option>'+"\n";
+    for (var i = 0; i < sheets.length; i++) {
+      selected =
+        sheets[i].getSheetId() == selectSheet.getSheetId() ? " selected" : "";
+      contentHTML +=
+        '       <option value="' +
+        sheets[i].getSheetId() +
+        '"' +
+        selected +
+        ">\n" +
+        "         " +
+        sheets[i].getName() +
+        "\n" +
+        "       </option>" +
+        "\n";
     }
   }
-  contentHTML+=
-	'       <option value="new">'+"\n"+
-  '       + New sheet'+"\n"+
-  '       </option>'+"\n"+
-	'     </select></br>'+"\n"+
-  '     <label class="sheetName">Name:</label>'+"\n"+
-	'     <input type="text" id="sheetID" name="sheetID" value="'+selectSheet.getSheetId()+'" class="sheetName"></br></br>'+"\n"+	
-  '     <input type="hidden" id="newSheet" name="newSheet" value="0">'+"\n"+
-	'     <center>'+
-	'      <input class="normWid" type="button" value="Submit" onclick="'+
-  '         google.script.run'+
-  '         .withSuccessHandler(function(value){'+
-  '         })'+
-  '         .submitData(form);'+
-  '         document.getElementById(\'form\').style.display === \'none\';'+
-	'         document.getElementById(\'done\').style.display = \'block\';'+
-  '">'+"\n"+
-	'     </center>'+
-  '    </form>'+"\n"+
-	'	  <p id="done" style="display:none;">Please wait!</p>'+"\n"+signature()+
-	' </body>'+"\n"+
-  '</html>';
-  var app= HtmlService.createHtmlOutput().setTitle("Setup Fitbit Download").setContent(contentHTML);
+  contentHTML +=
+    '       <option value="new">' +
+    "\n" +
+    "       + New sheet" +
+    "\n" +
+    "       </option>" +
+    "\n" +
+    "     </select></br>" +
+    "\n" +
+    '     <label class="sheetName">Name:</label>' +
+    "\n" +
+    '     <input type="text" id="sheetID" name="sheetID" value="' +
+    selectSheet.getSheetId() +
+    '" class="sheetName"></br></br>' +
+    "\n" +
+    '     <input type="hidden" id="newSheet" name="newSheet" value="0">' +
+    "\n" +
+    "     <center>" +
+    '      <input class="normWid" type="button" value="Submit" onclick="' +
+    "         google.script.run" +
+    "         .withSuccessHandler(function(value){" +
+    "         })" +
+    "         .submitData(form);" +
+    "         document.getElementById('form').style.display === 'none';" +
+    "         document.getElementById('done').style.display = 'block';" +
+    '">' +
+    "\n" +
+    "     </center>" +
+    "    </form>" +
+    "\n" +
+    '	  <p id="done" style="display:none;">Please wait!</p>' +
+    "\n" +
+    signature() +
+    " </body>" +
+    "\n" +
+    "</html>";
+  var app = HtmlService.createHtmlOutput()
+    .setTitle("Setup Fitbit Download")
+    .setContent(contentHTML);
   doc.show(app);
 }
 
-function authWindow(){
+function authWindow() {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
   var service = getFitbitService();
   var authorizationUrl = service.getAuthorizationUrl();
-  var contentHTML ='<a href="'+authorizationUrl+'" target="_blank">Click here to Authorize with Fitbit</a>'+signature();
-  var app= HtmlService.createHtmlOutput().setTitle("Setup Fitbit Download").setContent(contentHTML);
+  var contentHTML =
+    '<a href="' +
+    authorizationUrl +
+    '" target="_blank">Click here to Authorize with Fitbit</a>' +
+    signature();
+  var app = HtmlService.createHtmlOutput()
+    .setTitle("Setup Fitbit Download")
+    .setContent(contentHTML);
   doc.show(app);
 }
 
@@ -724,90 +918,159 @@ function authCallback(request) {
   var app;
   var contentHTML;
   if (isAuthorized) {
-    var displayContentHTML = 'Success! Please refresh the page .'+signature();
-    var displayApp= HtmlService.createHtmlOutput().setTitle("All done!").setContent(displayContentHTML);
-    contentHTML = 'Success! You can close this tab.';
-    app= HtmlService.createHtmlOutput().setTitle("Authorised!").setContent(contentHTML);
+    var displayContentHTML = "Success! Please refresh the page ." + signature();
+    var displayApp = HtmlService.createHtmlOutput()
+      .setTitle("All done!")
+      .setContent(displayContentHTML);
+    contentHTML = "Success! You can close this tab.";
+    app = HtmlService.createHtmlOutput()
+      .setTitle("Authorised!")
+      .setContent(contentHTML);
     var doc = SpreadsheetApp.getActiveSpreadsheet();
     doc.show(displayApp);
   } else {
-    contentHTML = 'Authorisation was denied.</br>Please check your FitBit credentials and try again!';
-    app= HtmlService.createHtmlOutput().setTitle("Oh no!").setContent(contentHTML);
+    contentHTML =
+      "Authorisation was denied.</br>Please check your FitBit credentials and try again!";
+    app = HtmlService.createHtmlOutput()
+      .setTitle("Oh no!")
+      .setContent(contentHTML);
   }
   return app;
-} 
+}
 
-function syncCustom(){
+function syncCustom() {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var contentHTML =''+
-  '<!DOCTYPE html>'+"\n"+
-  '<html>'+"\n"+
-	' <head>'+"\n"+
-  '   <script>'+"\n"+
-  '     function submitForm(form) {'+"\n"+
-  '       google.script.run'+"\n"+
-  '       .withSuccessHandler(function(value){'+"\n"+
-  '       })'+"\n"+
-  '       document.getElementById("form").style.display === "none";'+"\n"+
-	'       document.getElementById("done").style.display = "block";'+"\n"+
-  '       .submitData(form);'+"\n"+
-  '     }'+"\n"+
-  '   </script>'+"\n"+
-	' </head>'+"\n"+
-	' <body>'+"\n"+
-	'   <form id="form">'+"\n"+
-  '     <input type="hidden" id="task" name="task" value="sync">'+"\n"+
-	'     <label>Date to sync (year-month-day): </label>'+"\n"+
-	'     <input type="text" maxlength="4" size="4" id="year" name="year" value="'+(new Date().getFullYear())+'">'+" -\n\n"+
-	'     <input type="text" maxlength="2" size="2" id="month" name="month" value="'+(new Date().getMonth()+1)+'">'+" -\n\n"+
-	'     <input type="text" maxlength="2" size="2" id="day" name="day" value="'+(new Date().getDate())+'"></br>'+"\n\n"+		
-	'     <input type="button" value="Submit" onclick="'+
-  '       google.script.run'+
-  '       .withSuccessHandler(function(value){'+
-  '       })'+
-  '       .submitData(form);'+
-  '       document.getElementById(\'form\').style.display === \'none\';'+
-	'       document.getElementById(\'done\').style.display = \'block\';'+
-  '">'+"\n"+
-  '   </form>'+"\n"+
-	'	  <p id="done" style="display:none;">Done! Close the window!</p>'+"\n"+signature()+
-	' </body>'+"\n"+
-  '</html>';
-  var app= HtmlService.createHtmlOutput().setTitle("Sync Specific Day").setContent(contentHTML);
+  var contentHTML =
+    "" +
+    "<!DOCTYPE html>" +
+    "\n" +
+    "<html>" +
+    "\n" +
+    " <head>" +
+    "\n" +
+    "   <script>" +
+    "\n" +
+    "     function submitForm(form) {" +
+    "\n" +
+    "       google.script.run" +
+    "\n" +
+    "       .withSuccessHandler(function(value){" +
+    "\n" +
+    "       })" +
+    "\n" +
+    '       document.getElementById("form").style.display === "none";' +
+    "\n" +
+    '       document.getElementById("done").style.display = "block";' +
+    "\n" +
+    "       .submitData(form);" +
+    "\n" +
+    "     }" +
+    "\n" +
+    "   </script>" +
+    "\n" +
+    " </head>" +
+    "\n" +
+    " <body>" +
+    "\n" +
+    '   <form id="form">' +
+    "\n" +
+    '     <input type="hidden" id="task" name="task" value="sync">' +
+    "\n" +
+    "     <label>Date to sync (year-month-day): </label>" +
+    "\n" +
+    '     <input type="text" maxlength="4" size="4" id="year" name="year" value="' +
+    new Date().getFullYear() +
+    '">' +
+    " -\n\n" +
+    '     <input type="text" maxlength="2" size="2" id="month" name="month" value="' +
+    (new Date().getMonth() + 1) +
+    '">' +
+    " -\n\n" +
+    '     <input type="text" maxlength="2" size="2" id="day" name="day" value="' +
+    new Date().getDate() +
+    '"></br>' +
+    "\n\n" +
+    '     <input type="button" value="Submit" onclick="' +
+    "       google.script.run" +
+    "       .withSuccessHandler(function(value){" +
+    "       })" +
+    "       .submitData(form);" +
+    "       document.getElementById('form').style.display === 'none';" +
+    "       document.getElementById('done').style.display = 'block';" +
+    '">' +
+    "\n" +
+    "   </form>" +
+    "\n" +
+    '	  <p id="done" style="display:none;">Done! Close the window!</p>' +
+    "\n" +
+    signature() +
+    " </body>" +
+    "\n" +
+    "</html>";
+  var app = HtmlService.createHtmlOutput()
+    .setTitle("Sync Specific Day")
+    .setContent(contentHTML);
   doc.show(app);
 }
 
-function problemPrompt(problem="Undefined problem.", pTitle = "There was a problem!"){
+function problemPrompt(
+  problem = "Undefined problem.",
+  pTitle = "There was a problem!"
+) {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var contentHTML =''+
-  '<!DOCTYPE html>'+"\n"+
-  '<html>'+"\n"+
-	' <body>'+"\n"+
-	'	  <p>Something went wrong! Here\'s the message from the code:</p>'+"\n"+
-	'	  <code>'+problem+'</code>'+"\n"+
-	'	  <p>This is just to let you know. You can close this window if you want.</p>'+"\n"+signature()+
-	' </body>'+"\n"+
-  '</html>';
-  var app= HtmlService.createHtmlOutput().setTitle(pTitle).setContent(contentHTML);
+  var contentHTML =
+    "" +
+    "<!DOCTYPE html>" +
+    "\n" +
+    "<html>" +
+    "\n" +
+    " <body>" +
+    "\n" +
+    "	  <p>Something went wrong! Here's the message from the code:</p>" +
+    "\n" +
+    "	  <code>" +
+    problem +
+    "</code>" +
+    "\n" +
+    "	  <p>This is just to let you know. You can close this window if you want.</p>" +
+    "\n" +
+    signature() +
+    " </body>" +
+    "\n" +
+    "</html>";
+  var app = HtmlService.createHtmlOutput()
+    .setTitle(pTitle)
+    .setContent(contentHTML);
   doc.show(app);
 }
 
-function signature(){
+function signature() {
   return "</br></br><div style='text-align: right;font-style: italic;'>By <a href='https://jkybett.uk' target='_blank'>JKybett</a></div>";
 }
 
-function credits(){
+function credits() {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var contentHTML =''+
-  '<!DOCTYPE html>'+"\n"+
-  '<html>'+"\n"+
-	' <body>'+"\n"+
-	'	  <p>Something went wrong! Here\'s the message from the code:</p>'+"\n"+
-	'	  <code>'+problem+'</code>'+"\n"+
-	'	  <p>This is just to let you know. You can close this window if you want.</p>'+"\n"+signature()+
-	' </body>'+"\n"+
-  '</html>';
-  var app= HtmlService.createHtmlOutput().setTitle("").setContent(contentHTML);
+  var contentHTML =
+    "" +
+    "<!DOCTYPE html>" +
+    "\n" +
+    "<html>" +
+    "\n" +
+    " <body>" +
+    "\n" +
+    "	  <p>Something went wrong! Here's the message from the code:</p>" +
+    "\n" +
+    "	  <code>" +
+    problem +
+    "</code>" +
+    "\n" +
+    "	  <p>This is just to let you know. You can close this window if you want.</p>" +
+    "\n" +
+    signature() +
+    " </body>" +
+    "\n" +
+    "</html>";
+  var app = HtmlService.createHtmlOutput().setTitle("").setContent(contentHTML);
   doc.show(app);
 }
 
@@ -815,32 +1078,37 @@ function credits(){
 function onOpen() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   date = new Date();
-  var dateString = date.getFullYear()
-    + '-'
-    + ("00" + (date.getMonth() + 1)).slice(-2)
-    + '-'
-    + ("00" + (date.getDate())).slice(-2);
-  var menuEntries = [{
-                      name: "Setup",
-                      functionName: "firstRun"
-                    }];
-  if(isConfigured()){
-    menuEntries = [{
-                      name: "Sync Today (" + dateString + ")",
-                      functionName: "sync"
-                      }, 
-                      {
-                      name: "Sync (custom Date)",
-                      functionName: "syncCustom"
-                      }, 
-                      {
-                      name: "Setup",
-                      functionName: "setup"
-                      },
-                      {
-                      name: "Reset",
-                      functionName: "clearService"
-                      }];
+  var dateString =
+    date.getFullYear() +
+    "-" +
+    ("00" + (date.getMonth() + 1)).slice(-2) +
+    "-" +
+    ("00" + date.getDate()).slice(-2);
+  var menuEntries = [
+    {
+      name: "Setup",
+      functionName: "firstRun",
+    },
+  ];
+  if (isConfigured()) {
+    menuEntries = [
+      {
+        name: "Sync Today (" + dateString + ")",
+        functionName: "sync",
+      },
+      {
+        name: "Sync (custom Date)",
+        functionName: "syncCustom",
+      },
+      {
+        name: "Setup",
+        functionName: "setup",
+      },
+      {
+        name: "Reset",
+        functionName: "clearService",
+      },
+    ];
   }
   ss.addMenu("Fitbit", menuEntries);
 }
