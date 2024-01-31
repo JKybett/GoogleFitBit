@@ -9,6 +9,7 @@
 //    -Now fetches data using daily summaries rather than per-item ranges to avoid hitting API limits when getting single-day data.
 //    -Adapted to get data for more features of FitBit.
 //    -Friendlier setup UI.
+// Modifications 2024 - Tim Goodwyn - timgoodwyn.me.uk
 //
 // Current version on GitHub: https://github.com/JKybett/GoogleFitBit/blob/main/FitBit.gs
 //
@@ -554,149 +555,84 @@ function forEachRequiredField(statsObj, fieldObj, apiFieldsNeeded, fieldFn) {
 
 */
 function firstRun() {
-  var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var contentHTML =
-    "<html>" +
-    "\n" +
-    "<head>" +
-    "\n" +
-    "	<style>" +
-    "\n" +
-    "	label, input {" +
-    "\n" +
-    "		width:95%;" +
-    "\n" +
-    "	}" +
-    "\n" +
-    "    .radio {" +
-    "\n" +
-    "    	width:initial;" +
-    "\n" +
-    "    }" +
-    "\n" +
-    "    .box {" +
-    "\n" +
-    "    	border-style: solid;" +
-    "\n" +
-    "        padding: 5px;" +
-    "\n" +
-    "        margin-bottom: 10px;" +
-    "\n" +
-    "    }" +
-    "\n" +
-    "    #hidden {" +
-    "\n" +
-    "    	display: none;" +
-    "\n" +
-    "    }" +
-    "\n" +
-    "	</style>" +
-    "\n" +
-    "</head>" +
-    "\n" +
-    "  <body>" +
-    "\n" +
-    '      Go to <a href="https://dev.fitbit.com/apps/new">https://dev.fitbit.com/apps/new</a></br></br>' +
-    "\n" +
-    "      Login and register a new app using the following details:</br></br>" +
-    "\n" +
-    '    <div class="box" id="hider">' +
-    "\n" +
-    "        Only the options that must have specific values are shown below.</br>" +
-    "\n" +
-    "        <a href=\"#\" onclick=\"document.getElementById('hidden').style.display='block';document.getElementById('hider').style.display='none';return false;\">Click here</a> for example data you can copy and paste into the other fields." +
-    "\n" +
-    "    </div>" +
-    "\n" +
-    '    <div class="box" id="hidden">' +
-    "\n" +
-    "        These options can be filled with different data. This is only an example.</br>" +
-    "\n" +
-    "        You can <a href=\"#\" onclick=\"document.getElementById('hider').style.display='block';document.getElementById('hidden').style.display='none';return false;\">hide these options</a> if you want." +
-    "\n" +
-    "        </br></br>" +
-    "\n" +
-    '        <label>Application Name: </label></br><input type="text" value="Export to Google Spreadsheet" readonly></br></br>' +
-    "\n" +
-    '        <label>Description: </label></br><input type="text" value="Exports to Google Spreadsheet" readonly></br></br>' +
-    "\n" +
-    '        <label>Application Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>' +
-    "\n" +
-    '        <label>Organization: </label></br><input type="text" value="Me" readonly></br></br>' +
-    "\n" +
-    '        <label>Organization Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>' +
-    "\n" +
-    '        <label>Terms of Service URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>' +
-    "\n" +
-    '        <label>Privacy Policy URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>' +
-    "\n" +
-    "    </div>" +
-    "\n" +
-    '    <div class="box">' +
-    "\n" +
-    "        These options <b>must</b> be filled with the following data.</br></br>" +
-    "\n" +
-    "        <label>OAuth 2.0 Application Type: </label></br>" +
-    "\n" +
-    '        <input class="radio" type="radio" name="appType" id="Server" disabled>' +
-    "\n" +
-    '        <label class="radio" for="Server">Server</label>' +
-    "\n" +
-    '        <input class="radio" type="radio" name="appType" id="Client" disabled>' +
-    "\n" +
-    '        <label class="radio" for="Client">Client</label>' +
-    "\n" +
-    '        <input class="radio" type="radio" name="appType" id="Personal" checked>' +
-    "\n" +
-    '        <label class="radio" for="Personal">Personal</label></br></br>' +
-    "\n" +
-    '        <label>Redirect URL: </label></br><input type="text" value="https://script.google.com/macros/d/' +
-    ScriptApp.getScriptId() +
-    '/usercallback" readonly></br></br>' +
-    "\n" +
-    "        <label>Default Access Type: </label></br>" +
-    "\n" +
-    '        <input class="radio" type="radio" name="accessType" id="RWr" checked>' +
-    "\n" +
-    '        <label class="radio" for="RWr">Read & Write</label>' +
-    "\n" +
-    '        <input class="radio" type="radio" name="accessType" id="ROn" disabled>' +
-    "\n" +
-    '        <label class="radio" for="ROn">Read-Only</label></br></br>' +
-    "\n" +
-    "    </div>" +
-    "\n" +
-    '    Once you have accepted the terms and conditions and clicked "register", make a note of the following details on the next page:</br>' +
-    "\n" +
-    "    <ul>" +
-    "\n" +
-    "    <li><b>OAuth 2.0 Client ID</b></li>" +
-    "\n" +
-    "    <li><b>Client Secret</b></li>" +
-    "\n" +
-    "    </ul>" +
-    "\n" +
-    "    Then click the button below to move on to the next step:" +
-    "\n" +
-    '    <form id="form">' +
-    "\n" +
-    '    <input type="hidden" id="task" name="task" value="FitBitAPI">' +
-    "\n" +
-    '    <input class="normWid" type="button" value="Next" onclick="' +
-    "\n" +
-    "    google.script.run.withSuccessHandler(function(value){" +
-    "\n" +
-    "    }).submitData(form);document.getElementById('done').style.display = 'block';\">" +
-    "\n" +
-    "    </form>" +
-    "\n" +
-    '    <p id="done" style="display:none;">Please wait!</p>' +
-    "\n" +
-    signature() +
-    "  </body>" +
-    "\n" +
-    "</html>";
-  var app = HtmlService.createHtmlOutput()
+  const doc = SpreadsheetApp.getActiveSpreadsheet();
+  const contentHTML = `
+<html>
+  <head>
+    <style>
+      label, input {
+      width:95%;
+      }
+      .radio {
+        width:initial;
+      }
+      .box {
+        border-style: solid;
+        padding: 5px;
+        margin-bottom: 10px;
+      }
+      #hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    Go to <a href="https://dev.fitbit.com/apps/new">https://dev.fitbit.com/apps/new</a></br></br>
+    Login and register a new app using the following details:</br></br>
+    <div class="box" id="hider">
+      Only the options that must have specific values are shown below.</br>
+      <a href="#" onclick="document.getElementById('hidden').style.display='block';document.getElementById('hider').style.display='none';return false;">
+        Click here
+      </a> for example data you can copy and paste into the other fields.
+    </div>
+    <div class="box" id="hidden">
+      These options can be filled with different data. This is only an example.</br>
+      You can
+      <a href="#" onclick="document.getElementById('hider').style.display='block';document.getElementById('hidden').style.display='none';return false;">
+        hide these options
+      </a> if you want.
+      </br></br>
+      <label>Application Name: </label></br><input type="text" value="Export to Google Spreadsheet" readonly></br></br>
+      <label>Description: </label></br><input type="text" value="Exports to Google Spreadsheet" readonly></br></br>
+      <label>Application Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+      <label>Organization: </label></br><input type="text" value="Me" readonly></br></br>
+      <label>Organization Website URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+      <label>Terms of Service URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+      <label>Privacy Policy URL: </label></br><input type="text" value="https://docs.google.com/" readonly></br></br>
+    </div>
+    <div class="box">
+      These options <b>must</b> be filled with the following data.</br></br>
+      <label>OAuth 2.0 Application Type: </label></br>
+      <input class="radio" type="radio" name="appType" id="Server" disabled>
+      <label class="radio" for="Server">Server</label>
+      <input class="radio" type="radio" name="appType" id="Client" disabled>
+      <label class="radio" for="Client">Client</label>
+      <input class="radio" type="radio" name="appType" id="Personal" checked>
+      <label class="radio" for="Personal">Personal</label></br></br>
+      <label>Redirect URL: </label></br><input type="text" value="https://script.google.com/macros/d/${ScriptApp.getScriptId()}/usercallback" readonly></br></br>
+      <label>Default Access Type: </label></br>
+      <input class="radio" type="radio" name="accessType" id="RWr" checked>
+      <label class="radio" for="RWr">Read & Write</label>
+      <input class="radio" type="radio" name="accessType" id="ROn" disabled>
+      <label class="radio" for="ROn">Read-Only</label></br></br>
+    </div>
+    Once you have accepted the terms and conditions and clicked "register", make a note of the following details on the next page:</br>
+    <ul>
+      <li><b>OAuth 2.0 Client ID</b></li>
+      <li><b>Client Secret</b></li>
+    </ul>
+    Then click the button below to move on to the next step:
+    <form id="form">
+      <input type="hidden" id="task" name="task" value="FitBitAPI">
+      <input class="normWid" type="button" value="Next" onclick="
+        google.script.run.withSuccessHandler(function(value){
+        }).submitData(form);document.getElementById('done').style.display = 'block';">
+    </form>
+    <p id="done" style="display:none;">Please wait!</p>
+    ${signature()}
+  </body>
+</html>`;
+  const app = HtmlService.createHtmlOutput()
     .setTitle("Setup: FitBit App")
     .setContent(contentHTML);
   doc.show(app);
