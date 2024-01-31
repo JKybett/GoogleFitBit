@@ -49,10 +49,25 @@ const SERVICE_IDENTIFIER = "fitbit"; // usually do not need to change this eithe
  * @type { [api: string]: APIDefinition }
  */
 const apiDefinitions = {
+  activeZoneMinutes: {
+    fields: {
+      "activities-active-zone-minutes": {
+        0: {
+          value: [
+            "activeZoneMinutes",
+            "fatBurnActiveZoneMinutes",
+            "cardioActiveZoneMinutes",
+            "peakActiveZoneMinutes",
+          ],
+        },
+      },
+    },
+    scope: "activity",
+    url: "https://api.fitbit.com/1/user/-/activities/active-zone-minutes/date/[date]/1d.json",
+  },
   activities: {
     fields: {
       summary: [
-        "activeScore",
         "activityCalories",
         "caloriesBMR",
         "caloriesOut",
@@ -68,6 +83,17 @@ const apiDefinitions = {
     },
     scope: "activity",
     url: "https://api.fitbit.com/1/user/-/activities/date/[date].json",
+  },
+  activitiesHeart: {
+    fields: {
+      "activities-heart": {
+        0: {
+          value: ["restingHeartRate"],
+        },
+      },
+    },
+    scope: "heartrate",
+    url: "https://api.fitbit.com/1/user/-/activities/heart/date/[date]/1d.json",
   },
   breathingRate: {
     fields: {
